@@ -24,7 +24,7 @@ resource "aws_instance" "game_server" {
 }
 
 resource "aws_security_group" "game_sg" {
-  name = "game-sg"
+  name = "game-server"
 
   ingress {
     from_port   = 22
