@@ -3,14 +3,14 @@ pipeline {
     agent any
 
     environment {
-        KEY_PATH = "/var/lib/jenkins/jenkins-kp.pem"
+        KEY_PATH = "/var/lib/jenkins/jenkinskkp.pem"
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
-                checkout scm
+                git branch: 'main', url: 'https://github.com/muthu-innovator/muthudevop'
             }
         }
 
@@ -30,50 +30,38 @@ pipeline {
             }
         }
 
-        stage('Get Public IP') {
+        stage('Get Server IP') {
             steps {
-                script {
-                    env.SERVER_IP = sh(
-                        script: "cd terraform && terraform output -raw public_ip",
-                        returnStdout: true
-                    ).trim()
-
-                    echo "Server IP: ${SERVER_IP}"
+                dir('terraform') {
+                    script {
+                        env.SERVER_IP = sh(
+                            script: "terraform output -raw public_ip",
+                            returnStdout: true
+                        ).trim()
+                    }
+                    echo "Server IP is ${SERVER_IP}"
                 }
             }
         }
 
-        stage('Wait for EC2') {
+        stage('Wait for Server to be Ready') {
             steps {
-                echo "Waiting for EC2 to initialize..."
+                echo "Waiting for EC2 instance to finish booting..."
                 sh 'sleep 60'
-            }
-        }
-
-        stage('Install Nginx') {
-            steps {
-                sh """
-                ssh -i ${KEY_PATH} -o StrictHostKeyChecking=no ubuntu@${SERVER_IP} \
-                "sudo apt update && sudo apt install -y nginx"
-                """
             }
         }
 
         stage('Deploy Website') {
             steps {
-
                 sh """
-                echo "Copying website files..."
-                scp -i ${KEY_PATH} -o StrictHostKeyChecking=no website/* \
-                ubuntu@${SERVER_IP}:/tmp/
+                scp -r -i ${KEY_PATH} -o StrictHostKeyChecking=no website/* ubuntu@${SERVER_IP}:/tmp/
                 """
 
                 sh """
-                echo "Replacing default nginx page..."
                 ssh -i ${KEY_PATH} -o StrictHostKeyChecking=no ubuntu@${SERVER_IP} "
-                sudo rm -f /var/www/html/index.nginx-debian.html &&
-                sudo rm -f /var/www/html/index.html &&
-                sudo mv /tmp/* /var/www/html/"
+                sudo rm -rf /var/www/html/* &&
+                sudo mv /tmp/* /var/www/html/ &&
+                sudo systemctl restart nginx"
                 """
             }
         }
@@ -81,11 +69,10 @@ pipeline {
 
     post {
         success {
-            echo "🎉 Deployment Successful!"
-            echo "Open in browser: http://${SERVER_IP}"
+            echo "🎉 Deployment Successful! Visit: http://${SERVER_IP}"
         }
         failure {
-            echo "❌ Deployment Failed. Check logs."
+            echo "❌ Pipeline Failed. Check logs above."
         }
     }
 }
